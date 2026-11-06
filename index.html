@@ -1,0 +1,531 @@
+
+<!DOCTYPE html>
+<html lang="fa">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Venom Button</title>
+
+<style>
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  display: grid;
+  place-items: center;
+  background: white;
+  font-family: Arial;
+}
+
+.scene {
+  position: relative;
+  width: 96vw;
+  height: 92vh;
+  overflow: hidden;
+  border-radius: 34px;
+  background: rgba(255,255,255,0.10);
+  border: 1px solid rgba(170,205,225,0.18);
+  box-shadow: 0 18px 55px rgba(60,90,120,0.045);
+  backdrop-filter: blur(1px);
+  isolation: isolate;
+}
+
+#webLayer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.button-wrap {
+  position: absolute;
+  left: 50%;
+  top: 52%;
+  transform: translate(-50%,-50%);
+  width: 190px;
+  height: 165px;
+  display: grid;
+  place-items: center;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  z-index: 3;
+}
+
+.button-wrap.dragging {
+  cursor: grabbing;
+}
+
+.halo {
+  position: absolute;
+  inset: 8px -16px;
+  border-radius: 42px;
+  background: linear-gradient(
+    90deg,
+    #55caff,
+    #f5fdff 50%,
+    #55caff
+  );
+  filter: blur(19px);
+  opacity: .13;
+  transition: opacity .2s;
+}
+
+.button-wrap.pressed .halo {
+  opacity: .95;
+}
+
+.wood-button {
+  position: relative;
+  width: 150px;
+  height: 112px;
+  border-radius: 24px;
+  border: 1px solid #f0d1a088;
+
+  background:
+    repeating-linear-gradient(
+      4deg,
+      transparent 0 9px,
+      #4b210c22 10px 12px,
+      transparent 13px 19px
+    ),
+    linear-gradient(
+      135deg,
+      #d8a46b,
+      #9c5c2c 45%,
+      #6d391d
+    );
+
+  box-shadow:
+    0 13px 0 #4b2919,
+    0 20px 30px #0002,
+    inset 0 2px 5px #ffe4bd99,
+    inset 0 -8px 12px #4a210c88;
+
+  transition: transform .12s, box-shadow .12s;
+  z-index: 2;
+}
+
+.wood-button:before {
+  content: "";
+  position: absolute;
+  inset: 9px;
+  border-radius: 17px;
+  border: 1px solid #ffe0b455;
+  box-shadow: inset 0 1px 4px #fff4;
+}
+
+.wood-button:after {
+  content: "";
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  top: 17px;
+  height: 15px;
+  border-radius: 50%;
+  background: linear-gradient(#fff6,transparent);
+  filter: blur(5px);
+}
+
+.pressed .wood-button {
+  transform: translateY(10px) scale(.985);
+  box-shadow:
+    0 3px 0 #4b2919,
+    0 9px 18px #0002,
+    inset 0 3px 8px #4a210c77;
+}
+
+.side-light {
+  position: absolute;
+  top: 50%;
+  width: 17px;
+  height: 74px;
+  transform: translateY(-50%);
+  border-radius: 20px;
+
+  background: linear-gradient(
+    180deg,
+    #eafcff,
+    #58caff 50%,
+    #eafcff
+  );
+
+  opacity: 0;
+  box-shadow:
+    0 0 9px #6bd7ff,
+    0 0 24px #45bfff,
+    0 0 42px #45bfff;
+
+  transition: opacity .18s;
+  z-index: 1;
+}
+
+.side-light.left {
+  left: 0;
+}
+
+.side-light.right {
+  right: 0;
+}
+
+.pressed .side-light {
+  opacity: 1;
+}
+
+.reflection {
+  position: absolute;
+  bottom: 8px;
+  width: 125px;
+  height: 15px;
+  border-radius: 50%;
+  background: #c7edff22;
+  filter: blur(8px);
+}
+
+.pressed .reflection {
+  background: #73d9ff88;
+  width: 155px;
+}
+
+/* تارهای سیاه چسبنده */
+
+</style>
+</head>
+
+<body>
+
+<main class="scene" id="scene">
+
+  <svg id="webLayer"></svg>
+
+  <div class="button-wrap" id="buttonWrap">
+
+    <div class="halo"></div>
+
+    <div class="side-light left"></div>
+    <div class="side-light right"></div>
+
+    <div class="wood-button"></div>
+
+    <div class="reflection"></div>
+
+  </div>
+
+</main>
+
+<script>
+(() => {
+
+const scene = document.getElementById("scene");
+const button = document.getElementById("buttonWrap");
+const svg = document.getElementById("webLayer");
+
+let dragging = false;
+let moved = false;
+let charging = false;
+
+let startX = 0;
+let startY = 0;
+let baseX = 0;
+let baseY = 0;
+
+let x = 0;
+let y = 0;
+
+let timer = null;
+let shotTimer = null;
+
+const NS = "http://www.w3.org/2000/svg";
+
+const clamp = (v,a,b) =>
+  Math.max(a,Math.min(b,v));
+
+function paint() {
+
+  button.style.left =
+    `calc(50% + ${x}px)`;
+
+  button.style.top =
+    `calc(52% + ${y}px)`;
+
+}
+
+function pointOnButton() {
+
+  const r = scene.getBoundingClientRect();
+  const b = button.getBoundingClientRect();
+
+  return {
+    x: b.left-r.left+b.width/2,
+    y: b.top-r.top+b.height/2+42
+  };
+
+}
+
+function addPath(d,width,opacity=1) {
+
+  const p = document.createElementNS(NS,"path");
+
+  p.setAttribute("d",d);
+  p.setAttribute("fill","none");
+  p.setAttribute("stroke","#050505");
+  p.setAttribute("stroke-width",width);
+  p.setAttribute("stroke-linecap","round");
+  p.setAttribute("stroke-linejoin","round");
+  p.setAttribute("opacity",opacity);
+
+  p.style.filter =
+    "drop-shadow(0 1px 1px rgba(0,0,0,.18))";
+
+  svg.appendChild(p);
+
+  // درخشش خیس روی تار
+
+  const hi = document.createElementNS(NS,"path");
+
+  hi.setAttribute("d",d);
+  hi.setAttribute("fill","none");
+  hi.setAttribute("stroke","#777");
+  hi.setAttribute("stroke-width",Math.max(1,width*.16));
+  hi.setAttribute("stroke-linecap","round");
+  hi.setAttribute("opacity",".42");
+
+  svg.appendChild(hi);
+
+  const group = [p,hi];
+
+  group.forEach(el => {
+    el.style.transition = "opacity 1.2s ease";
+  });
+
+  // محو شدن تار بعد از مدتی
+
+  setTimeout(() => {
+    group.forEach(el => el.setAttribute("opacity","0"));
+  },4200);
+
+  setTimeout(() => {
+    group.forEach(el => el.remove());
+  },5500);
+
+}
+
+function shootWeb() {
+
+  const origin = pointOnButton();
+
+  const w = scene.clientWidth;
+  const h = scene.clientHeight;
+
+  const targets = [
+
+    {x:clamp(origin.x-150,12,w-12),y:12},
+
+    {x:w-12,y:clamp(origin.y-95,12,h-12)},
+
+    {x:clamp(origin.x+160,12,w-12),y:h-12},
+
+    {x:12,y:clamp(origin.y+75,12,h-12)},
+
+    {x:clamp(origin.x+35,12,w-12),y:12},
+
+    {x:w-12,y:clamp(origin.y+145,12,h-12)}
+
+  ];
+
+  // شلیک تارهای اصلی
+
+  targets.forEach((t,i) => {
+
+    const spread =
+      (i%2 ? 1 : -1) * (18+i*5);
+
+    const midX =
+      (origin.x+t.x)/2+spread;
+
+    const midY =
+      (origin.y+t.y)/2-spread*.55;
+
+    const d =
+      `M ${origin.x} ${origin.y}
+       Q ${midX} ${midY}
+       ${t.x} ${t.y}`;
+
+    addPath(d,i%3===0 ? 4.5 : 2.8);
+
+    // نقطه چسبیدن تار
+
+    const dot =
+      document.createElementNS(NS,"circle");
+
+    dot.setAttribute("cx",t.x);
+    dot.setAttribute("cy",t.y);
+    dot.setAttribute("r",i%2 ? 4 : 6);
+    dot.setAttribute("fill","#050505");
+
+    svg.appendChild(dot);
+
+    dot.style.transition = "opacity 1.2s ease";
+
+    setTimeout(() => {
+      dot.setAttribute("opacity","0");
+    },4200);
+
+    setTimeout(() => dot.remove(),5500);
+
+  });
+
+  // اتصال تارها به یکدیگر
+
+  for(let i=0;i<4;i++) {
+
+    const a = targets[i];
+    const b = targets[(i+1)%targets.length];
+
+    const cx = (a.x+b.x)/2+(i%2 ? 24 : -24);
+    const cy = (a.y+b.y)/2+(i%2 ? -20 : 20);
+
+    addPath(
+      `M ${a.x} ${a.y}
+       Q ${cx} ${cy}
+       ${b.x} ${b.y}`,
+      1.5,
+      .8
+    );
+
+  }
+
+}
+
+function beginCharge() {
+
+  if(!dragging || moved || charging) return;
+
+  charging = true;
+
+  shootWeb();
+
+  shotTimer = setInterval(shootWeb,1150);
+
+}
+
+function down(e) {
+
+  e.preventDefault();
+
+  dragging = true;
+  moved = false;
+  charging = false;
+
+  startX = e.clientX;
+  startY = e.clientY;
+
+  baseX = x;
+  baseY = y;
+
+  button.classList.add("dragging","pressed");
+
+  button.setPointerCapture(e.pointerId);
+
+  timer = setTimeout(beginCharge,650);
+
+}
+
+function move(e) {
+
+  if(!dragging) return;
+
+  const dx = e.clientX-startX;
+  const dy = e.clientY-startY;
+
+  if(Math.abs(dx)+Math.abs(dy)>8) {
+
+    moved = true;
+
+    clearTimeout(timer);
+
+    if(charging) {
+
+      charging = false;
+      clearInterval(shotTimer);
+
+    }
+
+  }
+
+  const b = scene.getBoundingClientRect();
+
+  const bw = button.offsetWidth;
+  const bh = button.offsetHeight;
+
+  x = clamp(
+    baseX+dx,
+    -b.width/2+bw/2+8,
+    b.width/2-bw/2-8
+  );
+
+  y = clamp(
+    baseY+dy,
+    -b.height/2+bh/2+8,
+    b.height/2-bh/2-8
+  );
+
+  paint();
+
+}
+
+function up() {
+
+  if(!dragging) return;
+
+  dragging = false;
+
+  clearTimeout(timer);
+  clearInterval(shotTimer);
+
+  charging = false;
+
+  button.classList.remove("dragging","pressed");
+
+}
+
+button.addEventListener("pointerdown",down);
+button.addEventListener("pointermove",move);
+button.addEventListener("pointerup",up);
+button.addEventListener("pointercancel",up);
+button.addEventListener("lostpointercapture",up);
+
+window.addEventListener("resize",() => {
+
+  x = clamp(
+    x,
+    -scene.clientWidth/2+105,
+    scene.clientWidth/2-105
+  );
+
+  y = clamp(
+    y,
+    -scene.clientHeight/2+90,
+    scene.clientHeight/2-90
+  );
+
+  paint();
+
+});
+
+})();
+</script>
+
+</body>
+  </html>
+  
